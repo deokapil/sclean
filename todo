@@ -1,0 +1,35 @@
+https://acoustid.org
+https://musicbrainz.org
+
+
+https://mayhemsongs1.s3.amazonaws.com/Amos%20Moses%20%28Jerry%20Reed%29
+https://mayhemsongs1.s3.amazonaws.com/What%20Really%20Goes%20On%20%28A%20Tribe%20Called%20Quest%29
+https://mayhemsongs1.s3.amazonaws.com/Intuition%20%28Jewel%29
+https://mayhemsongs1.s3.amazonaws.com/Today%20I%20Started%20Loving%20You%20Again%20%28Merle%20Haggard%29
+https://mayhemsongs1.s3.amazonaws.com/Lauren%20Daigle%20-%20Trust%20In%20You%20%28Radio%20Edit%29.mp3%20%28%29
+https://mayhemsongs1.s3.amazonaws.com/One%20Step%20Away%20%28Casting%20Crowns%29
+https://mayhemsongs1.s3.amazonaws.com/Monday%2C%20Monday%20%28The%20Mamas%20%26%20The%20Papas%29
+
+
+step 1:
+create node project
+
+step 2:
+
+install fpcalc pacakge
+
+step 3
+in main.js file
+
+download 1 song from above urls
+
+step 4
+
+create fingerprint from fpcalc
+
+step 5
+get id from acoustid site by sending the fingerprint
+
+
+step 6
+from that id get details from musicbrainz url
