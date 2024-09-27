@@ -1,8 +1,27 @@
-var csvParser = require("csv-parse");
-var fpcalc = require("fpcalc");
-var fs = require("fs");
+const csvParser = require("csv-parse");
+const fpcalc = require("fpcalc");
+const path = require("path");
+const fs = require("fs");
+const axios = require("axios");
+const winston = require("winston");
+
 const fileName = "data/all-songs.csv";
-var https = require("https");
+// Define the log file path
+const logFilePath = path.join(__dirname, "app.log");
+
+// Create a winston logger instance with file transport
+const logger = winston.createLogger({
+  level: "info", // Log level (info, error, warn, etc.)
+  format: winston.format.combine(
+    winston.format.timestamp(), // Add a timestamp to each log
+    winston.format.printf(({ timestamp, level, message }) => {
+      return `${timestamp} [${level.toUpperCase()}]: ${message}`;
+    })
+  ),
+  transports: [
+    new winston.transports.File({ filename: logFilePath }), // Log to a file
+  ],
+});
 
 // const key = "ylj1qLxDeY";
 const key = "euABKVAesT";
@@ -30,8 +49,7 @@ const getFingerPrint = (filePath) => {
   });
 };
 
-const get_all = async () => {
-  const filePath = "./Amos.mp3";
+const get_all = async (filePath) => {
   const { fingerprint, duration } = await getFingerPrint(filePath);
   let json = null;
   const url = `https://api.acoustid.org/v2/lookup?client=${key}&duration=${duration}&fingerprint=${fingerprint}`;
@@ -56,7 +74,7 @@ const parseCSV = (filePath) => {
   return new Promise((resolve, reject) => {
     fs.createReadStream(filePath).pipe(
       csvParser
-        .parse({ from_line: 2, delimiter: ",", to_line: 5 })
+        .parse({ from_line: 2, delimiter: ",", to_line: 3 })
         .on("data", (row) => {
           records.push(row);
         })
@@ -71,24 +89,20 @@ const parseCSV = (filePath) => {
   return records;
 };
 
-function getRemoteFile(file, url) {
-  let localFile = fs.createWriteStream(file);
-  const client = https;
-  const request = client.get(url, function (response) {
-    var len = parseInt(response.headers["content-length"], 10);
-    var cur = 0;
-    var total = len / 1048576; //1048576 - bytes in 1 Megabyte
+async function getRemoteFile(file, url) {
+  let writer = fs.createWriteStream(`./tmp/${file}`);
 
-    response.on("data", function (chunk) {
-      cur += chunk.length;
-      showProgress(file, cur, len, total);
-    });
+  const response = await axios({
+    url,
+    method: "GET",
+    responseType: "stream",
+  });
 
-    response.on("end", function () {
-      console.log("Download complete");
-    });
+  response.data.pipe(writer);
 
-    response.pipe(localFile);
+  return new Promise((resolve, reject) => {
+    writer.on("finish", resolve);
+    writer.on("error", reject);
   });
 }
 
@@ -98,7 +112,15 @@ const main = async () => {
   for (i = 0; i < records.length; i++) {
     let rec = records[i];
     let songName = rec[7].split("/").pop();
-    console.log(rec[7]);
+    console.log(rec[15]);
+    // Download the mp3 file from rec[15] and store it in songName
+    try {
+      await getRemoteFile(songName, rec[15]);
+      logger.error(`Success downloading ${rec[0]}: ${err}`);
+    } catch (err) {
+      logger.error(`Error downloading ${rec[0]}: ${err}`);
+      console.log(err);
+    }
   }
 };
 
