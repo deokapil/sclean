@@ -1,9 +1,33 @@
-const csvParser = require("csv-parse");
-const fpcalc = require("fpcalc");
+import {parse} from 'csv-parse';
+
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+
+const fpcalc = require("fpcalc")
+
 const path = require("path");
 const fs = require("fs");
-const axios = require("axios");
 const winston = require("winston");
+
+const axios = require("axios");
+const lowdb =  require("lowdb");
+const lnode = require('lowdb/node')
+
+// import { JSONFileSync } from "lowdb/node";
+
+const db = new lowdb.LowSync(new lnode.JSONFileSync("file01.json"), { posts: [] });
+db.read();
+
+const addToDB = async (msgList) => {
+  // check if record with messageId exists
+  msgList.forEach(async (data) => {
+    await db.data.posts.push(data);
+  });
+
+  db.write();
+};
+
+
 
 const fileName = "data/all-songs.csv";
 // Define the log file path
@@ -72,9 +96,11 @@ const parseCSV = (filePath) => {
   const records = [];
   // Initialize the parser
   return new Promise((resolve, reject) => {
+    const parser = parse({
+      delimiter: ","
+    })
     fs.createReadStream(filePath).pipe(
-      csvParser
-        .parse({ from_line: 2, delimiter: ",", to_line: 3 })
+        parser({ from_line: 2, delimiter: ",", to_line: 3 })
         .on("data", (row) => {
           records.push(row);
         })
@@ -86,7 +112,6 @@ const parseCSV = (filePath) => {
         })
     );
   });
-  return records;
 };
 
 async function getRemoteFile(file, url) {
