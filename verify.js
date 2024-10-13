@@ -1,33 +1,36 @@
 import { parse } from "csv-parse";
+import path from "path";
+import { fileURLToPath } from "url";
+import { LowSync } from "lowdb";
+import { JSONFileSync } from "lowdb/node";
 
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 
 const fpcalc = require("fpcalc");
 
-const path = require("path");
 const fs = require("fs");
 const winston = require("winston");
 
 const axios = require("axios");
-const lowdb = require("lowdb");
-const lnode = require("lowdb/node");
 
 const key = "euABKVAesT";
 
-// import { JSONFileSync } from "lowdb/node";
+const __filename = fileURLToPath(import.meta.url); // get the resolved path to the file
+const __dirname = path.dirname(__filename); // get the name of the directory
 
-const db = new lowdb.LowSync(new lnode.JSONFileSync("file01.json"), {
+const db = new LowSync(new JSONFileSync("file01.json"), {
   posts: [],
 });
 db.read();
 
-const addToDB = async (msgList) => {
-  // check if record with messageId exists
-  msgList.forEach(async (data) => {
-    await db.data.posts.push(data);
-  });
+function checkIfIdExists(id) {
+  return db.data.posts.find((post) => post.id === id);
+}
 
+const addToDB = async (msgList, songId) => {
+  // check if record with messageId exists
+  await db.data.posts.push({ id: songId, msgList: msgList.results });
   db.write();
 };
 
@@ -61,7 +64,12 @@ const getFingerPrint = (filePath) => {
 };
 
 const get_all = async (filePath) => {
-  const { fingerprint, duration } = await getFingerPrint(filePath);
+  try {
+    const { fingerprint, duration } = await getFingerPrint(filePath);
+  } catch (err) {
+    logger.error(`Error in fetching ${rec[0]}: ${err}`);
+    return null;
+  }
   let json = null;
   const url = `https://api.acoustid.org/v2/lookup?client=${key}&duration=${duration}&fingerprint=${fingerprint}`;
   try {
@@ -78,30 +86,26 @@ const get_all = async (filePath) => {
 
 // Parse csv file for file path
 
-const parseCSV = (filePath) => {
+const parseCSV = async (filePath) => {
   const records = [];
   // Initialize the parser
-  return new Promise((resolve, reject) => {
-    const parser = parse({
-      delimiter: ",",
-    });
-    fs.createReadStream(filePath).pipe(
-      parser({ from_line: 2, delimiter: ",", to_line: 3 })
-        .on("data", (row) => {
-          records.push(row);
-        })
-        .on("end", () => {
-          resolve(records);
-        })
-        .on("error", (err) => {
-          console.log(err);
-        })
-    );
-  });
+
+  const parser = fs.createReadStream(`${__dirname}/${filePath}`).pipe(
+    parse(
+      { from_line: 2, delimiter: ",", to_line: 20, delimiter: "," }
+      // CSV options if any
+    )
+  );
+
+  for await (const record of parser) {
+    // Work with each record
+    records.push(record);
+  }
+  return records;
 };
 
 async function getRemoteFile(file, url) {
-  let writer = fs.createWriteStream(`./tmp/${file}`);
+  let writer = fs.createWriteStream(file);
 
   const response = await axios({
     url,
@@ -117,29 +121,49 @@ async function getRemoteFile(file, url) {
   });
 }
 
+// Delete the Downloaded file
+
+const deleteFile = (filePath) => {
+  fs.unlink(`./tmp/${filePath}`, (err) => {
+    if (err) {
+      logger.error(err);
+    }
+  });
+};
+
 // Store response in database
 const main = async () => {
   const records = await parseCSV(fileName);
-  for (i = 0; i < records.length; i++) {
+  for (let i = 0; i < records.length; i++) {
     let rec = records[i];
+    if (checkIfIdExists(rec[0])) {
+      continue;
+    }
     let songName = rec[7].split("/").pop();
+    const filePath = `./tmp/${songName}`;
     // Download the mp3 file from rec[15] and store it in songName
     try {
-      await getRemoteFile(songName, rec[15]);
+      await getRemoteFile(filePath, rec[15]);
       logger.info(`Success downloading ${rec[0]}: ${err}`);
     } catch (err) {
       logger.error(`Error downloading ${rec[0]}: ${err}`);
     }
     try {
-      const messages = await get_all(songName);
+      const messages = await get_all(filePath);
       if (messages) {
-        addToDB(messages);
+        if (messages.status === "ok") {
+          await addToDB(messages, rec[0]);
+        }
       }
       logger.error(`Error no message recieved ${rec[0]}: ${err}`);
     } catch (err) {
       logger.error(`Error in fpcalc ${rec[0]}: ${err}`);
     }
+    // Delete the downloaded file
+    deleteFile(songName);
   }
 };
+
+// check if id exists in lowdb
 
 main();
